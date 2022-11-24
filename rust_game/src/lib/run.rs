@@ -1,9 +1,9 @@
 use winit::{
     event::{Event, ElementState, 
-        VirtualKeyCode, WindowEvent, 
+        DeviceEvent, VirtualKeyCode, WindowEvent, 
         KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{WindowBuilder, CursorGrabMode}
 };
 
 use crate::lib::State;
@@ -12,16 +12,30 @@ pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
+    window.set_cursor_visible(false);
+    window.set_cursor_grab(CursorGrabMode::Confined)
+        .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked))
+        .unwrap();
+
 
     let mut state = State::new(&window).await;
+    let mut last_render_time = instant::Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         match event {
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion{ delta, },
+                ..
+            } => if state.mouse_pressed {
+                state.camera_controller.process_mouse(delta.0, delta.1)
+            }
+
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() => if !state.input(event) { // UPDATED!
+            } if window_id == window.id() && !state.input(event) => {
                 match event {
+                    #[cfg(not(target_arch="wasm32"))]
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
                         input:
@@ -43,7 +57,10 @@ pub async fn run() {
             }
 
             Event::RedrawRequested(window_id) if window_id == window.id() => {
-                state.update();
+                let now = instant::Instant::now();
+                let dt = now - last_render_time;
+                last_render_time = now;
+                state.update(dt);
                 match state.render() {
                     Ok(_) => {}
                     // Reconfigure the surface if lost
