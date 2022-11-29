@@ -1,4 +1,5 @@
 mod lib;
+mod world;
 
 use crate::lib::run;
 

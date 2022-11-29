@@ -1,3 +1,7 @@
 
 *.DS_Store
 rust_game/target/
+rust_game/target/.rustc_info.json
+rust_game/target/.rustc_info.json
+rust_game/target/debug/rust_game
+rust_game/target/debug/rust_game.d
