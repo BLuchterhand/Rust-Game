@@ -2,7 +2,7 @@ pub mod run;
 mod camera;
 mod texture;
 mod instance;
-mod model;
+pub mod model;
 mod resources;
 
 use model::Vertex;
@@ -23,6 +23,7 @@ use std::iter;
 use cgmath::prelude::*;
 
 use crate::lib::model::DrawModel;
+use crate::world::World;
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
 
@@ -49,18 +50,17 @@ struct State {
     light_bind_group: wgpu::BindGroup,
     light_render_pipeline: wgpu::RenderPipeline,
     mouse_pressed: bool,
+    world: World,
 }
 
-fn create_render_pipeline(
+pub fn create_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     color_format: wgpu::TextureFormat,
     depth_format: Option<wgpu::TextureFormat>,
     vertex_layouts: &[wgpu::VertexBufferLayout],
-    shader: wgpu::ShaderModuleDescriptor,
+    shader: &wgpu::ShaderModule,
 ) -> wgpu::RenderPipeline {
-    let shader = device.create_shader_module(shader);
-
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
         layout: Some(layout),
@@ -265,17 +265,18 @@ impl State {
             });
 
         let render_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
+            let desc = wgpu::ShaderModuleDescriptor {
                 label: Some("Normal Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
             };
+            let shader = device.create_shader_module(desc);
             create_render_pipeline(
                 &device,
                 &render_pipeline_layout,
                 config.format,
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc(), InstanceRaw::desc()],
-                shader,
+                &shader,
             )
         };
 
@@ -285,17 +286,18 @@ impl State {
                 bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
                 push_constant_ranges: &[],
             });
-            let shader = wgpu::ShaderModuleDescriptor {
+            let desc = wgpu::ShaderModuleDescriptor {
                 label: Some("Light Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
             };
+            let shader = device.create_shader_module(desc);
             create_render_pipeline(
                 &device,
                 &layout,
                 config.format,
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[model::ModelVertex::desc()],
-                shader,
+                &shader,
             )
         };        
                      
@@ -333,6 +335,8 @@ impl State {
             &texture_bind_group_layout,
         ).await.unwrap();    
 
+        let world = World::new();
+
         Self {
             surface,
             device,
@@ -355,6 +359,7 @@ impl State {
             light_bind_group,
             light_render_pipeline,
             mouse_pressed: true, // TODO: update to not be necessary, maybe just hold general mouse cursor state? hidden/not?
+            world,
         }
     }
 
@@ -411,6 +416,8 @@ impl State {
             (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(60.0 * dt.as_secs_f32()))
             * old_position).into();
         self.queue.write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&[self.light_uniform]));
+
+        self.world.get_chunk(&self.device, self.camera.position)
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

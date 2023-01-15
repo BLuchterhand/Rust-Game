@@ -4,8 +4,6 @@ use winit::dpi::PhysicalPosition;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 
-use crate::world::World;
-
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -206,9 +204,6 @@ impl CameraController {
         } else if camera.pitch > Rad(SAFE_FRAC_PI_2) {
             camera.pitch = Rad(SAFE_FRAC_PI_2);
         }
-
-        let mut noise = World::new();
-        println!("{:?}", noise.get_terrain(camera.position.x as f64, camera.position.z as f64))
     }
 }
 

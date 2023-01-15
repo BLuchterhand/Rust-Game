@@ -150,6 +150,7 @@ pub async fn load_model(
                 index_buffer,
                 num_elements: m.mesh.indices.len() as u32,
                 material: m.mesh.material_id.unwrap_or(0),
+                index_format: wgpu::IndexFormat::Uint32,
             }
         })
         .collect::<Vec<_>>();
