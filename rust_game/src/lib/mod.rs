@@ -22,8 +22,11 @@ use winit::{
 use std::iter;
 use cgmath::prelude::*;
 
-use crate::lib::model::DrawModel;
-use crate::world::World;
+use crate::{lib::model::DrawModel, world::{WorldHackPipeline, self}};
+use crate::world::{
+    World,
+    WorldPipeline,
+};
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
 
@@ -51,6 +54,8 @@ struct State {
     light_render_pipeline: wgpu::RenderPipeline,
     mouse_pressed: bool,
     world: World,
+    world_pipeline: WorldPipeline,
+    world_hack_pipeline: WorldHackPipeline,
 }
 
 pub fn create_render_pipeline(
@@ -335,6 +340,28 @@ impl State {
             &texture_bind_group_layout,
         ).await.unwrap();    
 
+        let chunk_size = (16, 16).into();
+        let min_max_height = (-5.0, 5.0).into();
+        let world_pipeline = WorldPipeline::new(
+            &device,
+            chunk_size,
+            min_max_height,
+            &camera_bind_group_layout,
+            &light_bind_group_layout,
+            config.format,
+            Some(texture::Texture::DEPTH_FORMAT),
+        );
+
+        let world_hack_pipeline = world::WorldHackPipeline::new(
+            &device,
+            chunk_size,
+            min_max_height,
+            &camera_bind_group_layout,
+            &light_bind_group_layout,
+            config.format,
+            Some(texture::Texture::DEPTH_FORMAT),
+        );
+
         let world = World::new();
 
         Self {
@@ -360,6 +387,8 @@ impl State {
             light_render_pipeline,
             mouse_pressed: true, // TODO: update to not be necessary, maybe just hold general mouse cursor state? hidden/not?
             world,
+            world_pipeline,
+            world_hack_pipeline,
         }
     }
 
@@ -417,7 +446,7 @@ impl State {
             * old_position).into();
         self.queue.write_buffer(&self.light_buffer, 0, bytemuck::cast_slice(&[self.light_uniform]));
 
-        self.world.get_chunk(&self.device, self.camera.position)
+        self.world.get_chunk(&self.device,  &self.queue, self.camera.position)
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -473,6 +502,13 @@ impl State {
                 &self.obj_model,
                 0..self.instances.len() as u32,
                 &self.camera_bind_group,
+                &self.light_bind_group,
+            );
+
+            self.world_pipeline.render(
+                &mut render_pass, 
+                &self.world, 
+                &self.camera_bind_group, 
                 &self.light_bind_group,
             );
         }
