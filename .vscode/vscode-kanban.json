@@ -1,0 +1,86 @@
+{
+  "todo": [
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T01:08:03.060Z",
+      "id": "5",
+      "prio": 5,
+      "references": [],
+      "title": "Investigate: Chunk Discovery Array -> HashMap",
+      "details": {
+        "content": "Unclear which is faster. Likely hash. Consider after generation is complete.",
+        "mime": "text/markdown"
+      }
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T00:14:14.842Z",
+      "id": "2",
+      "prio": 4,
+      "references": [],
+      "title": "Add color to terrain"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T00:14:33.942Z",
+      "id": "3",
+      "prio": 4,
+      "references": [],
+      "title": "Refactor Entire Project"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T01:42:01.156Z",
+      "id": "6",
+      "prio": 1,
+      "references": [],
+      "title": "Fix set_cursor_grab"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T00:49:40.397Z",
+      "id": "4",
+      "references": [],
+      "title": "Investigate Terrain Gen Randomness"
+    }
+  ],
+  "in-progress": [
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T02:14:53.062Z",
+      "description": {
+        "content": "Current implementation generates a new chunk for each discrete step, rather than a new chunk for a chunk area.",
+        "mime": "text/markdown"
+      },
+      "id": "7",
+      "prio": 5,
+      "references": [],
+      "title": "Fix generation to generate actual chunks"
+    }
+  ],
+  "testing": [],
+  "done": [
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T00:14:02.134Z",
+      "id": "1",
+      "prio": 5,
+      "references": [],
+      "title": "Generate chunks on demand"
+    }
+  ]
+}
