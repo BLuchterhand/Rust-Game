@@ -1,4 +1,6 @@
-use std::mem::size_of_val;
+use std::{mem::size_of_val};
+
+use cgmath::Vector2;
 
 use crate::lib::{create_render_pipeline, model};
 
@@ -32,16 +34,65 @@ impl World {
         pipeline: &impl GenerateChunk,
         position: cgmath::Vector3<f32>,
     ) {
-        let corner = position.xz().cast().unwrap();
-        let mut index = None;
-        for (i, chunk) in self.chunks.iter().enumerate() {
-            if chunk.corner == corner {
-                index = Some(i);
+        let mut x_coord = ((position.x as i32 / 32) + 1) * 32;
+        let mut z_coord = ((position.z as i32 / 32) + 1) * 32;
+
+        if x_coord == -0 {
+            x_coord = 0
+        }
+
+        if z_coord == -0 {
+            z_coord = 0
+        }
+
+        let r = 2;
+        let n = 2 * r + 1;
+        let mut x: i32;
+        let mut z: i32;
+
+
+        let mut save_idx = Vec::new();
+        for i in 0..n {
+            for j in 0..n {
+                x = i-r;
+                z = j-r;
+
+                let anchor_coords = Vector2::new(x*32 + x_coord - (32 * r), z*32 + z_coord - (32 * r));
+
+                if x*x + z*z <= r*r+1 {
+                    let mut index = None;
+                    for (i, chunk) in self.chunks.iter().enumerate() {
+                        if chunk.corner == anchor_coords {
+                            index = Some(i);
+                            save_idx.push(i);
+                        }
+                    }
+                    let existing_chunk = index.map(|index| self.chunks.remove(index));
+                    self.chunks
+                        .push(pipeline.gen_chunk(&device, &queue, anchor_coords, existing_chunk));
+                } 
             }
         }
-        let existing_chunk = index.map(|index| self.chunks.remove(index));
-        self.chunks
-            .push(pipeline.gen_chunk(&device, &queue, corner, existing_chunk));
+
+        save_idx.dedup();
+        save_idx.reverse();
+        for i in (0..save_idx.len()).rev() {
+            if !save_idx.contains(&i) {
+                self.chunks.remove(i as usize);
+            }
+        }
+
+        // let mut index = None;
+        // for (i, chunk) in self.chunks.iter().enumerate() {
+        //     println!("{:?}", anchor_corner);
+        //     println!("{:?}", position);
+        //     if chunk.corner == anchor_corner {
+        //         index = Some(i);
+        //     }
+        // }
+        // let existing_chunk = index.map(|index| self.chunks.remove(index));
+        // self.chunks
+        //     .push(pipeline.gen_chunk(&device, &queue, anchor_corner, existing_chunk));
     }
 }
 
@@ -209,7 +260,6 @@ impl GenerateChunk for WorldPipeline {
                 mapped_at_creation: false,
             });
             let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
-            println!("num_elements: {}", num_elements);
             let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("{}: Indices", chunk_name)),
                 size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
@@ -275,7 +325,7 @@ impl GenerateChunk for WorldPipeline {
         cpass.set_pipeline(&self.gen_pipeline);
         cpass.set_bind_group(0, &bind_group, &[]);
         cpass.dispatch_workgroups(
-            dbg!((((self.chunk_size.x + 1) * (self.chunk_size.y + 1)) as f32 / 64.0).ceil()) as _,
+            (((self.chunk_size.x + 1) * (self.chunk_size.y + 1)) as f32 / 64.0).ceil() as _,
             1,
             1,
         );

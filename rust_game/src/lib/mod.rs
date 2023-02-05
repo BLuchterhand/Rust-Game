@@ -234,7 +234,6 @@ impl State {
                 label: Some("texture_bind_group_layout"),
             });
 
-        // UPDATED!
         let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
         let projection =
             camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 500.0);
