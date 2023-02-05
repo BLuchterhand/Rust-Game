@@ -1,23 +1,24 @@
 use crate::lib::model;
 
-pub struct Instance {
-  pub position: cgmath::Vector3<f32>,
-  pub rotation: cgmath::Quaternion<f32>,
-}
-
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[allow(dead_code)]
 pub struct InstanceRaw {
     model: [[f32; 4]; 4],
     normal: [[f32; 3]; 3],
 }
 
+pub struct Instance {
+    pub position: cgmath::Vector3<f32>,
+    pub rotation: cgmath::Quaternion<f32>,
+}
+
 impl Instance {
     pub fn to_raw(&self) -> InstanceRaw {
-        let model =
-            cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
         InstanceRaw {
-            model: model.into(),
+            model: (cgmath::Matrix4::from_translation(self.position)
+                * cgmath::Matrix4::from(self.rotation))
+            .into(),
             normal: cgmath::Matrix3::from(self.rotation).into(),
         }
     }
@@ -57,7 +58,6 @@ impl model::Vertex for InstanceRaw {
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-                // NEW!
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
                     shader_location: 9,
