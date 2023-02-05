@@ -1,4 +1,4 @@
-use std::{mem::size_of_val};
+use std::mem::size_of_val;
 
 use cgmath::Vector2;
 
@@ -34,8 +34,10 @@ impl World {
         pipeline: &impl GenerateChunk,
         position: cgmath::Vector3<f32>,
     ) {
-        let mut x_coord = ((position.x as i32 / 32) + 1) * 32;
-        let mut z_coord = ((position.z as i32 / 32) + 1) * 32;
+        let mut x_coord =
+            ((position.x as i32 / self.chunk_size.x as i32) + 1) * self.chunk_size.x as i32;
+        let mut z_coord =
+            ((position.z as i32 / self.chunk_size.y as i32) + 1) * self.chunk_size.y as i32;
 
         if x_coord == -0 {
             x_coord = 0
@@ -50,16 +52,16 @@ impl World {
         let mut x: i32;
         let mut z: i32;
 
-
         let mut save_idx = Vec::new();
         for i in 0..n {
             for j in 0..n {
-                x = i-r;
-                z = j-r;
+                x = i - r;
+                z = j - r;
 
-                let anchor_coords = Vector2::new(x*32 + x_coord - (32 * r), z*32 + z_coord - (32 * r));
+                let anchor_coords =
+                    Vector2::new(x * 32 + x_coord - (32 * r), z * 32 + z_coord - (32 * r));
 
-                if x*x + z*z <= r*r+1 {
+                if x * x + z * z <= r * r + 1 {
                     let mut index = None;
                     for (i, chunk) in self.chunks.iter().enumerate() {
                         if chunk.corner == anchor_coords {
@@ -68,9 +70,13 @@ impl World {
                         }
                     }
                     let existing_chunk = index.map(|index| self.chunks.remove(index));
-                    self.chunks
-                        .push(pipeline.gen_chunk(&device, &queue, anchor_coords, existing_chunk));
-                } 
+                    self.chunks.push(pipeline.gen_chunk(
+                        &device,
+                        &queue,
+                        anchor_coords,
+                        existing_chunk,
+                    ));
+                }
             }
         }
 
@@ -81,18 +87,6 @@ impl World {
                 self.chunks.remove(i as usize);
             }
         }
-
-        // let mut index = None;
-        // for (i, chunk) in self.chunks.iter().enumerate() {
-        //     println!("{:?}", anchor_corner);
-        //     println!("{:?}", position);
-        //     if chunk.corner == anchor_corner {
-        //         index = Some(i);
-        //     }
-        // }
-        // let existing_chunk = index.map(|index| self.chunks.remove(index));
-        // self.chunks
-        //     .push(pipeline.gen_chunk(&device, &queue, anchor_corner, existing_chunk));
     }
 }
 

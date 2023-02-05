@@ -4,6 +4,16 @@
       "assignedTo": {
         "name": "BLuchterhand"
       },
+      "creation_time": "2023-02-05T04:11:03.112Z",
+      "id": "8",
+      "prio": 5,
+      "references": [],
+      "title": "Investigate benchmarking and resource usage"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
       "creation_time": "2023-02-05T01:08:03.060Z",
       "id": "5",
       "prio": 5,
@@ -28,11 +38,11 @@
       "assignedTo": {
         "name": "BLuchterhand"
       },
-      "creation_time": "2023-02-05T00:14:33.942Z",
-      "id": "3",
-      "prio": 4,
+      "creation_time": "2023-02-05T04:15:15.960Z",
+      "id": "9",
+      "prio": 3,
       "references": [],
-      "title": "Refactor Entire Project"
+      "title": "Investigate off-center terrain gen"
     },
     {
       "assignedTo": {
@@ -59,6 +69,19 @@
       "assignedTo": {
         "name": "BLuchterhand"
       },
+      "creation_time": "2023-02-05T00:14:33.942Z",
+      "id": "3",
+      "prio": 4,
+      "references": [],
+      "title": "Refactor Entire Project"
+    }
+  ],
+  "testing": [],
+  "done": [
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
       "creation_time": "2023-02-05T02:14:53.062Z",
       "description": {
         "content": "Current implementation generates a new chunk for each discrete step, rather than a new chunk for a chunk area.",
@@ -68,10 +91,7 @@
       "prio": 5,
       "references": [],
       "title": "Fix generation to generate actual chunks"
-    }
-  ],
-  "testing": [],
-  "done": [
+    },
     {
       "assignedTo": {
         "name": "BLuchterhand"

@@ -1,9 +1,7 @@
 use winit::{
-    event::{Event, ElementState, 
-        DeviceEvent, VirtualKeyCode, WindowEvent, 
-        KeyboardInput},
+    event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::{WindowBuilder, CursorGrabMode}
+    window::{CursorGrabMode, WindowBuilder},
 };
 
 use crate::lib::State;
@@ -23,7 +21,8 @@ pub async fn run() {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     window.set_cursor_visible(false);
     // TODO: Fix this (wrap in some?)
-    window.set_cursor_grab(CursorGrabMode::Confined)
+    window
+        .set_cursor_grab(CursorGrabMode::Confined)
         .or_else(|_e| window.set_cursor_grab(CursorGrabMode::Locked));
     let title = env!("CARGO_PKG_NAME");
     let window = winit::window::WindowBuilder::new()
