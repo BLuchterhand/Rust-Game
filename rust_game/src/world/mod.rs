@@ -59,7 +59,9 @@ impl World {
                 z = j - r;
 
                 let anchor_coords =
-                    Vector2::new(x * 32 + x_coord - (32 * r), z * 32 + z_coord - (32 * r));
+                    Vector2::new(
+                        x * self.chunk_size.x as i32 + x_coord - (self.chunk_size.x as i32 * r), 
+                        z * self.chunk_size.y as i32 + z_coord - (self.chunk_size.y as i32 * r));
 
                 if x * x + z * z <= r * r + 1 {
                     let mut index = None;

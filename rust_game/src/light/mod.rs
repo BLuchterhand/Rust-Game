@@ -1,8 +1,7 @@
 use wgpu::{util::DeviceExt, SurfaceConfiguration};
 
-use crate::lib::{create_render_pipeline, model, texture};
 use crate::lib::model::Vertex;
-
+use crate::lib::{create_render_pipeline, model, texture};
 
 pub struct Light {
     pub uniform: LightUniform,
@@ -23,7 +22,7 @@ pub struct LightUniform {
 
 impl Light {
     pub fn new(
-        device: &wgpu::Device, 
+        device: &wgpu::Device,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
         config: &SurfaceConfiguration,
     ) -> Self {
@@ -35,7 +34,7 @@ impl Light {
         };
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light VB"),
+            label: Some("Light Vertex Buffer"),
             contents: bytemuck::cast_slice(&[uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });

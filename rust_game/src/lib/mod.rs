@@ -291,7 +291,7 @@ impl State {
 
         let render_pipeline = init_render_pipeline(&device, &render_pipeline_layout, &config);
         let debug_material = init_debug_material(&device, &queue, &texture_bind_group_layout);
-        let chunk_size = (32, 32).into();
+        let chunk_size = (256, 256).into();
         let min_max_height = (-5.0, 5.0).into();
         let world = World::new(chunk_size, min_max_height);
         let world_pipeline = world::WorldPipeline::new(
@@ -336,7 +336,6 @@ impl State {
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        // UPDATED!
         if new_size.width > 0 && new_size.height > 0 {
             self.projection.resize(new_size.width, new_size.height);
             self.size = new_size;
@@ -348,7 +347,6 @@ impl State {
         }
     }
 
-    // UPDATED!
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput {
