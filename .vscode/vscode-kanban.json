@@ -20,7 +20,7 @@
       "references": [],
       "title": "Investigate: Chunk Discovery Array -> HashMap",
       "details": {
-        "content": "Unclear which is faster. Likely hash. Consider after generation is complete.",
+        "content": "Unclear which is faster. Likely hash. Consider after generation is complete.\n\nFor hash:\nFollow comments at lines:\n66 - 89\n227\n\nResults:\nLooks possible based on google, however, it looks like this infrastructure is not built for it. Values in a HashMap are always found by reference, and while they can be obtained by removing them from the HashMap, this creates problems when attempting to render them in the render pass. This would require removing them from the HashMap, rendering, and adding back to the HashMap. This creates a borrow/lifecycle problem that I can't find a way around right now... maybe more experience will help.",
         "mime": "text/markdown"
       }
     },
@@ -28,11 +28,31 @@
       "assignedTo": {
         "name": "BLuchterhand"
       },
-      "creation_time": "2023-02-05T00:14:14.842Z",
-      "id": "2",
+      "creation_time": "2023-02-08T01:24:56.200Z",
+      "id": "11",
       "prio": 4,
       "references": [],
-      "title": "Add color to terrain"
+      "title": "Config"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-08T01:26:31.603Z",
+      "id": "12",
+      "prio": 4,
+      "references": [],
+      "title": "Investigate higher resolution ground texture"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T00:14:33.942Z",
+      "id": "3",
+      "prio": 4,
+      "references": [],
+      "title": "Refactor Entire Project"
     },
     {
       "assignedTo": {
@@ -43,6 +63,16 @@
       "prio": 3,
       "references": [],
       "title": "Investigate off-center terrain gen"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-08T01:24:48.362Z",
+      "id": "10",
+      "prio": 2,
+      "references": [],
+      "title": "Mouse sensitivity"
     },
     {
       "assignedTo": {
@@ -62,20 +92,19 @@
       "id": "4",
       "references": [],
       "title": "Investigate Terrain Gen Randomness"
-    }
-  ],
-  "in-progress": [
+    },
     {
       "assignedTo": {
         "name": "BLuchterhand"
       },
-      "creation_time": "2023-02-05T00:14:33.942Z",
-      "id": "3",
+      "creation_time": "2023-02-08T01:27:25.364Z",
+      "id": "13",
       "prio": 4,
       "references": [],
-      "title": "Refactor Entire Project"
+      "title": "Investigate frame-skip weirdness with mouse response"
     }
   ],
+  "in-progress": [],
   "testing": [],
   "done": [
     {
@@ -101,6 +130,20 @@
       "prio": 5,
       "references": [],
       "title": "Generate chunks on demand"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T00:14:14.842Z",
+      "id": "2",
+      "prio": 4,
+      "references": [],
+      "title": "Add color to terrain",
+      "details": {
+        "content": "Easy - in the @fragment function, lines 277 and 278.\nChanging the smoothstep function from a 0.1 (second value) in line 277 removed height line\nChanging values in 278 (RGB format) gave me new colors",
+        "mime": "text/markdown"
+      }
     }
   ]
 }

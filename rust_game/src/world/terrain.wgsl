@@ -274,8 +274,8 @@ fn color23(p: vec2<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var color = smoothstep(vec3<f32>(0.0), vec3<f32>(0.1), fract(in.world_pos));
-    color = mix(vec3<f32>(0.5, 0.1, 0.7), vec3<f32>(0.2, 0.2, 0.2), vec3<f32>(color.x * color.y * color.z));
+    var color = smoothstep(vec3<f32>(0.0), vec3<f32>(0.0), fract(in.world_pos));
+    color = mix(vec3<f32>(0.2, 0.7, 0.4), vec3<f32>(0.2, 0.7, 0.2), vec3<f32>(color.x * color.y * color.z));
 
     let ambient_strength = 0.1;
     let ambient_color = light.color * ambient_strength;
