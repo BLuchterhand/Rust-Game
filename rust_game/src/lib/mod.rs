@@ -4,6 +4,7 @@ pub mod model;
 mod resources;
 pub mod run;
 pub mod texture;
+mod options;
 
 use camera::CameraUniform;
 use cgmath::prelude::*;
@@ -291,7 +292,7 @@ impl State {
 
         let render_pipeline = init_render_pipeline(&device, &render_pipeline_layout, &config);
         let debug_material = init_debug_material(&device, &queue, &texture_bind_group_layout);
-        let chunk_size = (256, 256).into();
+        let chunk_size = (32, 32).into();
         let min_max_height = (-5.0, 5.0).into();
         let world = World::new(chunk_size, min_max_height);
         let world_pipeline = world::WorldPipeline::new(

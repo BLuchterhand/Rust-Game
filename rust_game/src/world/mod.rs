@@ -1,4 +1,5 @@
-use std::mem::size_of_val;
+use std::{mem::size_of_val, string};
+use std::collections::HashMap;
 
 use cgmath::Vector2;
 
@@ -13,7 +14,7 @@ struct ChunkData {
 }
 
 pub struct World {
-    chunks: Vec<Chunk>,
+    chunks: HashMap<String, Chunk>,
     chunk_size: cgmath::Vector2<u32>,
     min_max_height: cgmath::Vector2<f32>,
 }
@@ -21,7 +22,7 @@ pub struct World {
 impl World {
     pub fn new(chunk_size: cgmath::Vector2<u32>, min_max_height: cgmath::Vector2<f32>) -> Self {
         Self {
-            chunks: Vec::new(),
+            chunks: HashMap::new(),
             chunk_size,
             min_max_height,
         }
@@ -34,11 +35,13 @@ impl World {
         pipeline: &impl GenerateChunk,
         position: cgmath::Vector3<f32>,
     ) {
+        // Get the x and z coords of the chunk identifier
         let mut x_coord =
             ((position.x as i32 / self.chunk_size.x as i32) + 1) * self.chunk_size.x as i32;
         let mut z_coord =
             ((position.z as i32 / self.chunk_size.y as i32) + 1) * self.chunk_size.y as i32;
 
+        // normalize 0 if math leaves negative sign
         if x_coord == -0 {
             x_coord = 0
         }
@@ -47,53 +50,46 @@ impl World {
             z_coord = 0
         }
 
+        // define chunk boundaries
         let r = 2;
         let n = 2 * r + 1;
         let mut x: i32;
         let mut z: i32;
 
-        let mut save_idx = Vec::new();
+        let mut new_chunks = HashMap::new();
+
         for i in 0..n {
             for j in 0..n {
                 x = i - r;
                 z = j - r;
 
+                // convert anchor point to coordinates?
                 let anchor_coords =
                     Vector2::new(
                         x * self.chunk_size.x as i32 + x_coord - (self.chunk_size.x as i32 * r), 
-                        z * self.chunk_size.y as i32 + z_coord - (self.chunk_size.y as i32 * r));
+                        z * self.chunk_size.y as i32 + z_coord - (self.chunk_size.y as i32 * r),
+                    );
 
+                // if chunk is within render distance
                 if x * x + z * z <= r * r + 1 {
-                    let mut index = None;
-                    for (i, chunk) in self.chunks.iter().enumerate() {
-                        if chunk.corner == anchor_coords {
-                            index = Some(i);
-                            save_idx.push(i);
-                        }
+                    let chunk_key = format!("{}_{}", anchor_coords.x, anchor_coords.y);
+                    if let Some(chunk) = self.chunks.remove(&chunk_key) {
+                        println!("Chunk exists!");
+                        new_chunks.insert(chunk_key.clone(), chunk);
+                    } else {
+                        println!("Chunk does not exist!");
+                        let new_chunk = pipeline.gen_chunk(&device, &queue, anchor_coords);
+                        new_chunks.insert(chunk_key.clone(), new_chunk);
                     }
-                    let existing_chunk = index.map(|index| self.chunks.remove(index));
-                    self.chunks.push(pipeline.gen_chunk(
-                        &device,
-                        &queue,
-                        anchor_coords,
-                        existing_chunk,
-                    ));
                 }
             }
         }
 
-        save_idx.dedup();
-        save_idx.reverse();
-        for i in (0..save_idx.len()).rev() {
-            if !save_idx.contains(&i) {
-                self.chunks.remove(i as usize);
-            }
-        }
+        self.chunks = new_chunks;
     }
 }
 
 pub struct Chunk {
-    corner: cgmath::Vector2<i32>,
     mesh: model::Mesh,
 }
 
@@ -103,7 +99,6 @@ pub trait GenerateChunk {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         corner: cgmath::Vector2<i32>,
-        existing_chunk: Option<Chunk>,
     ) -> Chunk;
 }
 
@@ -224,7 +219,7 @@ impl WorldPipeline {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, camera_bind_group, &[]);
         render_pass.set_bind_group(1, light_bind_group, &[]);
-        for chunk in &terrain.chunks {
+        for (_, chunk) in &terrain.chunks {
             render_pass
                 .set_index_buffer(chunk.mesh.index_buffer.slice(..), chunk.mesh.index_format);
             render_pass.set_vertex_buffer(0, chunk.mesh.vertex_buffer.slice(..));
@@ -239,42 +234,35 @@ impl GenerateChunk for WorldPipeline {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         corner: cgmath::Vector2<i32>,
-        existing_chunk: Option<Chunk>,
     ) -> Chunk {
-        let chunk = if let Some(mut chunk) = existing_chunk {
-            chunk.corner = corner;
-            chunk
-        } else {
-            let chunk_name = format!("Chunk {:?}", corner);
-            let num_vertices = (self.chunk_size.x + 1) * (self.chunk_size.y + 1);
-            let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(&format!("{}: Vertices", chunk_name)),
-                size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::VERTEX
-                    | wgpu::BufferUsages::COPY_SRC,
-                mapped_at_creation: false,
-            });
-            let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
-            let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(&format!("{}: Indices", chunk_name)),
-                size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::INDEX
-                    | wgpu::BufferUsages::COPY_SRC,
-                mapped_at_creation: false,
-            });
-            Chunk {
-                corner,
-                mesh: model::Mesh {
-                    name: chunk_name,
-                    vertex_buffer,
-                    index_buffer,
-                    num_elements,
-                    material: 0,
-                    index_format: wgpu::IndexFormat::Uint32,
-                },
-            }
+        let chunk_name = format!("Chunk {:?}", corner);
+        let num_vertices = (self.chunk_size.x + 1) * (self.chunk_size.y + 1);
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{}: Vertices", chunk_name)),
+            size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
+        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{}: Indices", chunk_name)),
+            size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDEX
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let chunk = Chunk {
+            mesh: model::Mesh {
+                name: chunk_name,
+                vertex_buffer,
+                index_buffer,
+                num_elements,
+                material: 0,
+                index_format: wgpu::IndexFormat::Uint32,
+            },
         };
 
         let data = ChunkData {
