@@ -35,26 +35,18 @@ impl World {
         pipeline: &impl GenerateChunk,
         position: cgmath::Vector3<f32>,
     ) {
-        // Get the x and z coords of the chunk identifier
-        let mut x_coord =
-            ((position.x as i32 / self.chunk_size.x as i32) + 1) * self.chunk_size.x as i32;
-        let mut z_coord =
-            ((position.z as i32 / self.chunk_size.y as i32) + 1) * self.chunk_size.y as i32;
-
-        // normalize 0 if math leaves negative sign
-        if x_coord == -0 {
-            x_coord = 0
-        }
-
-        if z_coord == -0 {
-            z_coord = 0
-        }
 
         // define chunk boundaries
-        let r = 2;
+        let r = 8;
         let n = 2 * r + 1;
         let mut x: i32;
         let mut z: i32;
+
+        // Get the x and z coords of the chunk identifier
+        let x_coord =
+            ((position.x as i32 / self.chunk_size.x as i32) + r) * self.chunk_size.x as i32;
+        let z_coord =
+            ((position.z as i32 / self.chunk_size.y as i32) + r) * self.chunk_size.y as i32;
 
         let mut new_chunks = HashMap::new();
 
@@ -63,7 +55,7 @@ impl World {
                 x = i - r;
                 z = j - r;
 
-                // convert anchor point to coordinates?
+                // convert anchor point to coordinates
                 let anchor_coords =
                     Vector2::new(
                         x * self.chunk_size.x as i32 + x_coord - (self.chunk_size.x as i32 * r), 
@@ -74,10 +66,10 @@ impl World {
                 if x * x + z * z <= r * r + 1 {
                     let chunk_key = format!("{}_{}", anchor_coords.x, anchor_coords.y);
                     if let Some(chunk) = self.chunks.remove(&chunk_key) {
-                        println!("Chunk exists!");
+                        // chunk exists
                         new_chunks.insert(chunk_key.clone(), chunk);
                     } else {
-                        println!("Chunk does not exist!");
+                        // chunk does not exist, generate
                         let new_chunk = pipeline.gen_chunk(&device, &queue, anchor_coords);
                         new_chunks.insert(chunk_key.clone(), new_chunk);
                     }

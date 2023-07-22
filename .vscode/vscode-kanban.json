@@ -18,9 +18,9 @@
       "id": "5",
       "prio": 5,
       "references": [],
-      "title": "Investigate: Chunk Discovery Array -> HashMap",
+      "title": "Chunk Discovery Array -> HashMap",
       "details": {
-        "content": "Unclear which is faster. Likely hash. Consider after generation is complete.\n\nFor hash:\nFollow comments at lines:\n66 - 89\n227\n\nResults:\nLooks possible based on google, however, it looks like this infrastructure is not built for it. Values in a HashMap are always found by reference, and while they can be obtained by removing them from the HashMap, this creates problems when attempting to render them in the render pass. This would require removing them from the HashMap, rendering, and adding back to the HashMap. This creates a borrow/lifecycle problem that I can't find a way around right now... maybe more experience will help.",
+        "content": "Replace self.chunks Vec with a Hashmap",
         "mime": "text/markdown"
       }
     },
@@ -33,6 +33,16 @@
       "prio": 4,
       "references": [],
       "title": "Config"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-08T01:27:25.364Z",
+      "id": "13",
+      "prio": 4,
+      "references": [],
+      "title": "Investigate frame-skip weirdness with mouse response"
     },
     {
       "assignedTo": {
@@ -92,16 +102,6 @@
       "id": "4",
       "references": [],
       "title": "Investigate Terrain Gen Randomness"
-    },
-    {
-      "assignedTo": {
-        "name": "BLuchterhand"
-      },
-      "creation_time": "2023-02-08T01:27:25.364Z",
-      "id": "13",
-      "prio": 4,
-      "references": [],
-      "title": "Investigate frame-skip weirdness with mouse response"
     }
   ],
   "in-progress": [],
