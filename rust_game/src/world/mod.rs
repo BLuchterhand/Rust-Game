@@ -1,5 +1,7 @@
-use std::{mem::size_of_val, string};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    mem::size_of_val,
+};
 
 use cgmath::Vector2;
 
@@ -35,9 +37,8 @@ impl World {
         pipeline: &impl GenerateChunk,
         position: cgmath::Vector3<f32>,
     ) {
-
         // define chunk boundaries
-        let r = 8;
+        let r = 10; // chunk distance
         let n = 2 * r + 1;
         let mut x: i32;
         let mut z: i32;
