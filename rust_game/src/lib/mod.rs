@@ -6,12 +6,18 @@ pub mod run;
 pub mod texture;
 mod options;
 
-use camera::CameraUniform;
+use camera::{
+    CameraUniform,
+    CameraPosition,
+};
 use cgmath::prelude::*;
 use instance::{Instance, InstanceRaw};
 use model::Vertex;
-use std::iter;
-use wgpu::{util::DeviceExt, SurfaceConfiguration};
+use std::{iter, sync::{Arc, Mutex}, cell::RefCell, borrow::Cow, result};
+use wgpu::{
+    util::{DeviceExt, DownloadBuffer}, 
+    SurfaceConfiguration,
+};
 use winit::{
     event::{ElementState, KeyboardInput, MouseButton, WindowEvent},
     window::Window,
@@ -25,6 +31,11 @@ use crate::lib::model::DrawLight;
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
 
+#[repr(C)]
+struct ResultBuffer {
+    data: [f32; 1],
+}
+
 struct State {
     window: Window,
     surface: wgpu::Surface,
@@ -32,13 +43,17 @@ struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
+    compute_pipeline: wgpu::ComputePipeline,
     obj_model: model::Model,
     camera: camera::Camera,
     projection: camera::Projection,
     camera_controller: camera::CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
+    camera_position_buffer: wgpu::Buffer,
+    ray_intersection_result_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    camera_position_bind_group: wgpu::BindGroup,
     instances: Vec<Instance>,
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
@@ -104,6 +119,19 @@ pub fn create_render_pipeline(
         // If the pipeline will be used with a multiview render pass, this
         // indicates how many array layers the attachments will have.
         multiview: None,
+    })
+}
+
+pub fn create_compute_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+) -> wgpu::ComputePipeline {
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some(&format!("{:?}", shader)),
+        layout: Some(layout),
+        module:shader,
+        entry_point: &"intersectRayPlane",
     })
 }
 
@@ -290,7 +318,72 @@ impl State {
                 push_constant_ranges: &[],
             });
 
+        let mut camera_position = CameraUniform::new();
+        camera_position.update_view_proj(&camera, &projection);
+
+        let camera_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera_position]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let num_elements_in_buffer = 1; // Calculate the number of elements in the buffer based on your requirements
+        let initial_data = vec![10002.0; num_elements_in_buffer];
+        let ray_intersection_result_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&initial_data),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        let compute_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("compute_bind_group_layout"),
+            });
+
+        let camera_position_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &compute_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_position_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: ray_intersection_result_buffer.as_entire_binding(),
+            }],
+            label: Some("camera_position_bind_group"),
+        });
+
+        let compute_pipeline_layout =
+                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Compute Pipeline Layout"),
+                    bind_group_layouts: &[&compute_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
+
         let render_pipeline = init_render_pipeline(&device, &render_pipeline_layout, &config);
+        let compute_pipeline = init_compute_pipeline(&device, &compute_pipeline_layout);
         let debug_material = init_debug_material(&device, &queue, &texture_bind_group_layout);
         let chunk_size = (32, 32).into();
         let min_max_height = (-5.0, 5.0).into();
@@ -312,12 +405,16 @@ impl State {
             queue,
             config,
             render_pipeline,
+            compute_pipeline,
             obj_model,
             camera,
             projection,
             camera_controller,
             camera_buffer,
+            camera_position_buffer,
+            ray_intersection_result_buffer,
             camera_bind_group,
+            camera_position_bind_group,
             camera_uniform,
             instances,
             instance_buffer,
@@ -375,7 +472,7 @@ impl State {
         }
     }
 
-    fn update(&mut self, dt: std::time::Duration) {
+   async fn update(&mut self, dt: std::time::Duration) {
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
@@ -396,7 +493,50 @@ impl State {
             bytemuck::cast_slice(&[self.light.uniform]),
         );
 
-        self.world.gen_chunk(
+        let size = std::mem::size_of::<f32>() as wgpu::BufferAddress;
+        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let initial_data = vec![12.0; 1];
+        let storage_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Storage Buffer"),
+            contents: bytemuck::cast_slice(&initial_data),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
+        self.queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+        self.device.poll(wgpu::Maintain::Wait);
+
+        if let Some(Ok(())) = receiver.receive().await {
+            let data = buffer_slice.get_mapped_range();
+
+            let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
+            println!("{:?}", data);
+            println!("{:?}", result);
+            drop(data);
+            staging_buffer.unmap();
+        } else {
+            panic!("failed to run compute on gpu!")
+        }
+
+        self.world.load_chunks(
             &self.device,
             &self.queue,
             &self.world_pipeline,
@@ -499,6 +639,26 @@ fn init_render_pipeline(
     };
 
     render_pipeline
+}
+
+fn init_compute_pipeline(
+    device: &wgpu::Device,
+    compute_pipeline_layout: &wgpu::PipelineLayout,
+) -> wgpu::ComputePipeline {
+    let compute_pipeline = {
+        let desc = wgpu::ShaderModuleDescriptor {
+            label: Some("Compute"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
+        };
+        let shader = device.create_shader_module(desc);
+        create_compute_pipeline(
+            &device,
+            &compute_pipeline_layout,
+            &shader,
+        )
+    };
+
+    compute_pipeline
 }
 
 fn init_debug_material(

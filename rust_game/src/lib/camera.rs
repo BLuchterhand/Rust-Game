@@ -215,3 +215,22 @@ impl CameraUniform {
         self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into()
     }
 }
+
+// This exists only for ray interception
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CameraPosition {
+    view_position: [f32; 4],
+}
+
+impl CameraPosition {
+    pub fn new() -> Self {
+        Self {
+            view_position: [0.0; 4],
+        }
+    }
+
+    pub fn update_camera_position(&mut self, camera: &Camera) {
+        self.view_position = camera.position.to_homogeneous().into();
+    }
+}

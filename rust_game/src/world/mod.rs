@@ -30,7 +30,7 @@ impl World {
         }
     }
 
-    pub fn gen_chunk(
+    pub fn load_chunks(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -267,7 +267,6 @@ impl GenerateChunk for WorldPipeline {
             label: Some("TerrainPipeline: ChunkData"),
             size: size_of_val(&data) as _,
             usage: wgpu::BufferUsages::UNIFORM
-                // | wgpu::BufferUsages::MAP_READ
                 | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
