@@ -6,16 +6,13 @@ pub mod run;
 pub mod texture;
 mod options;
 
-use camera::{
-    CameraUniform,
-    CameraPosition,
-};
+use camera::CameraUniform;
 use cgmath::prelude::*;
 use instance::{Instance, InstanceRaw};
 use model::Vertex;
-use std::{iter, sync::{Arc, Mutex}, cell::RefCell, borrow::Cow, result};
+use std::iter;
 use wgpu::{
-    util::{DeviceExt, DownloadBuffer}, 
+    util::DeviceExt, 
     SurfaceConfiguration,
 };
 use winit::{
@@ -31,11 +28,6 @@ use crate::lib::model::DrawLight;
 
 const NUM_INSTANCES_PER_ROW: u32 = 1;
 
-#[repr(C)]
-struct ResultBuffer {
-    data: [f32; 1],
-}
-
 struct State {
     window: Window,
     surface: wgpu::Surface,
@@ -43,17 +35,13 @@ struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
-    compute_pipeline: wgpu::ComputePipeline,
     obj_model: model::Model,
     camera: camera::Camera,
     projection: camera::Projection,
     camera_controller: camera::CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
-    camera_position_buffer: wgpu::Buffer,
-    ray_intersection_result_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
-    camera_position_bind_group: wgpu::BindGroup,
     instances: Vec<Instance>,
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
@@ -405,16 +393,12 @@ impl State {
             queue,
             config,
             render_pipeline,
-            compute_pipeline,
             obj_model,
             camera,
             projection,
             camera_controller,
             camera_buffer,
-            camera_position_buffer,
-            ray_intersection_result_buffer,
             camera_bind_group,
-            camera_position_bind_group,
             camera_uniform,
             instances,
             instance_buffer,
@@ -473,27 +457,8 @@ impl State {
     }
 
    async fn update(&mut self, dt: std::time::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform
-            .update_view_proj(&self.camera, &self.projection);
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            bytemuck::cast_slice(&[self.camera_uniform]),
-        );
-
-        let old_position: cgmath::Vector3<_> = self.light.uniform.position.into();
-        self.light.uniform.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(1.0))
-                * old_position)
-                .into();
-        self.queue.write_buffer(
-            &self.light.buffer,
-            0,
-            bytemuck::cast_slice(&[self.light.uniform]),
-        );
-
-        let size = std::mem::size_of::<f32>() as wgpu::BufferAddress;
+        //! Get distance from ground, feed into camera
+        let size = std::mem::size_of::<f64>() as wgpu::BufferAddress;
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size,
@@ -527,14 +492,33 @@ impl State {
         if let Some(Ok(())) = receiver.receive().await {
             let data = buffer_slice.get_mapped_range();
 
-            let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
-            println!("{:?}", data);
+            let result: Vec<f64> = bytemuck::cast_slice(&data).to_vec();
             println!("{:?}", result);
             drop(data);
             staging_buffer.unmap();
         } else {
             panic!("failed to run compute on gpu!")
         }
+
+        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera_uniform]),
+        );
+
+        let old_position: cgmath::Vector3<_> = self.light.uniform.position.into();
+        self.light.uniform.position =
+            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(1.0))
+                * old_position)
+                .into();
+        self.queue.write_buffer(
+            &self.light.buffer,
+            0,
+            bytemuck::cast_slice(&[self.light.uniform]),
+        );
 
         self.world.load_chunks(
             &self.device,
