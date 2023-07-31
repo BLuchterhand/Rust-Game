@@ -5,9 +5,12 @@ mod resources;
 pub mod run;
 pub mod texture;
 mod options;
+mod pipelines;
+mod utils;
 
+use std::convert::TryInto;
 use camera::CameraUniform;
-use cgmath::prelude::*;
+use cgmath::{prelude::*, Vector2};
 use instance::{Instance, InstanceRaw};
 use model::Vertex;
 use std::iter;
@@ -19,6 +22,7 @@ use winit::{
     event::{ElementState, KeyboardInput, MouseButton, WindowEvent},
     window::Window,
 };
+use pipelines::ray_intersection::RayIntersectPipeline;
 
 use crate::light::Light;
 use crate::world::World;
@@ -42,6 +46,7 @@ struct State {
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    ray_intersection_pipeline: RayIntersectPipeline,
     instances: Vec<Instance>,
     #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
@@ -107,19 +112,6 @@ pub fn create_render_pipeline(
         // If the pipeline will be used with a multiview render pass, this
         // indicates how many array layers the attachments will have.
         multiview: None,
-    })
-}
-
-pub fn create_compute_pipeline(
-    device: &wgpu::Device,
-    layout: &wgpu::PipelineLayout,
-    shader: &wgpu::ShaderModule,
-) -> wgpu::ComputePipeline {
-    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(&format!("{:?}", shader)),
-        layout: Some(layout),
-        module:shader,
-        entry_point: &"intersectRayPlane",
     })
 }
 
@@ -309,73 +301,11 @@ impl State {
         let mut camera_position = CameraUniform::new();
         camera_position.update_view_proj(&camera, &projection);
 
-        let camera_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_position]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let num_elements_in_buffer = 1; // Calculate the number of elements in the buffer based on your requirements
-        let initial_data = vec![10002.0; num_elements_in_buffer];
-        let ray_intersection_result_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&initial_data),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        });
-
-        let compute_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-                label: Some("compute_bind_group_layout"),
-            });
-
-        let camera_position_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &compute_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_position_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: ray_intersection_result_buffer.as_entire_binding(),
-            }],
-            label: Some("camera_position_bind_group"),
-        });
-
-        let compute_pipeline_layout =
-                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Compute Pipeline Layout"),
-                    bind_group_layouts: &[&compute_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
-
         let render_pipeline = init_render_pipeline(&device, &render_pipeline_layout, &config);
-        let compute_pipeline = init_compute_pipeline(&device, &compute_pipeline_layout);
         let debug_material = init_debug_material(&device, &queue, &texture_bind_group_layout);
         let chunk_size = (32, 32).into();
         let min_max_height = (-5.0, 5.0).into();
-        let world = World::new(chunk_size, min_max_height);
+        let world = World::new(chunk_size);
         let world_pipeline = world::WorldPipeline::new(
             &device,
             chunk_size,
@@ -384,6 +314,13 @@ impl State {
             &light.bind_group_layout,
             config.format,
             Some(texture::Texture::DEPTH_FORMAT),
+        );
+
+        let ray_intersection_pipeline = RayIntersectPipeline::new(
+            &device, 
+            &camera,
+            &camera_buffer, 
+            &world,
         );
 
         Self {
@@ -400,6 +337,7 @@ impl State {
             camera_buffer,
             camera_bind_group,
             camera_uniform,
+            ray_intersection_pipeline,
             instances,
             instance_buffer,
             depth_texture,
@@ -458,47 +396,33 @@ impl State {
 
    async fn update(&mut self, dt: std::time::Duration) {
         //! Get distance from ground, feed into camera
-        let size = std::mem::size_of::<f64>() as wgpu::BufferAddress;
-        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let x_coord = (self.camera.position.x as i32 / 32 as i32) * 32 as i32;
+        let z_coord = (self.camera.position.z as i32 / 32 as i32) * 32 as i32;
+        let corner = Vector2::new(x_coord, z_coord);
+        
+        // let result = self.ray_intersection_pipeline.get_buffer_contents(
+        //     &self.device, 
+        //     &self.queue, 
+        //     chunk,
+        // ).await;
 
-        let initial_data = vec![12.0; 1];
-        let storage_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Storage Buffer"),
-            contents: bytemuck::cast_slice(&initial_data),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
-        });
+        // println!("{:?}", result);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        // let buffer_slice = &self.ray_intersection_pipeline.staging_buffer.slice(..);
+        // let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        // buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+        // self.device.poll(wgpu::Maintain::Wait);
 
-        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
-        self.queue.submit(Some(encoder.finish()));
+        // if let Some(Ok(())) = receiver.receive().await {
+        //     let data = buffer_slice.get_mapped_range();
 
-        let buffer_slice = staging_buffer.slice(..);
-        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-        buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-        self.device.poll(wgpu::Maintain::Wait);
-
-        if let Some(Ok(())) = receiver.receive().await {
-            let data = buffer_slice.get_mapped_range();
-
-            let result: Vec<f64> = bytemuck::cast_slice(&data).to_vec();
-            println!("{:?}", result);
-            drop(data);
-            staging_buffer.unmap();
-        } else {
-            panic!("failed to run compute on gpu!")
-        }
+        //     let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
+        //     drop(data);
+        //     println!("{:?}", result);
+        //     &self.ray_intersection_pipeline.staging_buffer.unmap();
+        // } else {
+        //     panic!("failed to run compute on gpu!")
+        // }
 
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform
@@ -530,7 +454,7 @@ impl State {
                 self.camera.position.z,
             )
                 .into(),
-        );
+        ).await;
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -623,26 +547,6 @@ fn init_render_pipeline(
     };
 
     render_pipeline
-}
-
-fn init_compute_pipeline(
-    device: &wgpu::Device,
-    compute_pipeline_layout: &wgpu::PipelineLayout,
-) -> wgpu::ComputePipeline {
-    let compute_pipeline = {
-        let desc = wgpu::ShaderModuleDescriptor {
-            label: Some("Compute"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
-        };
-        let shader = device.create_shader_module(desc);
-        create_compute_pipeline(
-            &device,
-            &compute_pipeline_layout,
-            &shader,
-        )
-    };
-
-    compute_pipeline
 }
 
 fn init_debug_material(

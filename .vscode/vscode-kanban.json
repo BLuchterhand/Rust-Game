@@ -14,35 +14,11 @@
       "assignedTo": {
         "name": "BLuchterhand"
       },
-      "creation_time": "2023-02-05T01:08:03.060Z",
-      "id": "5",
-      "prio": 5,
-      "references": [],
-      "title": "Chunk Discovery Array -> HashMap",
-      "details": {
-        "content": "Replace self.chunks Vec with a Hashmap",
-        "mime": "text/markdown"
-      }
-    },
-    {
-      "assignedTo": {
-        "name": "BLuchterhand"
-      },
       "creation_time": "2023-02-08T01:24:56.200Z",
       "id": "11",
       "prio": 4,
       "references": [],
       "title": "Config"
-    },
-    {
-      "assignedTo": {
-        "name": "BLuchterhand"
-      },
-      "creation_time": "2023-02-08T01:27:25.364Z",
-      "id": "13",
-      "prio": 4,
-      "references": [],
-      "title": "Investigate frame-skip weirdness with mouse response"
     },
     {
       "assignedTo": {
@@ -63,16 +39,6 @@
       "prio": 4,
       "references": [],
       "title": "Refactor Entire Project"
-    },
-    {
-      "assignedTo": {
-        "name": "BLuchterhand"
-      },
-      "creation_time": "2023-02-05T04:15:15.960Z",
-      "id": "9",
-      "prio": 3,
-      "references": [],
-      "title": "Investigate off-center terrain gen"
     },
     {
       "assignedTo": {
@@ -104,9 +70,37 @@
       "title": "Investigate Terrain Gen Randomness"
     }
   ],
-  "in-progress": [],
+  "in-progress": [
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-07-31T20:08:55.859Z",
+      "description": {
+        "content": "Chunk generation should be handled seperately from the render/camera loops. Ideally, both loops maintain their own World entities, but syncronize their chunks between each other.\n\nSomething like:\nchunk gen loop finishes an iteration, pushes changes to master chunk loop\nrender loop begins iteration by reading master chunk loop\n\nWould rely on mutex?",
+        "mime": "text/markdown"
+      },
+      "id": "14",
+      "references": [],
+      "title": "Extract chunk loading into own loop"
+    }
+  ],
   "testing": [],
   "done": [
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T01:08:03.060Z",
+      "id": "5",
+      "prio": 5,
+      "references": [],
+      "title": "Chunk Discovery Array -> HashMap",
+      "details": {
+        "content": "Replace self.chunks Vec with a Hashmap",
+        "mime": "text/markdown"
+      }
+    },
     {
       "assignedTo": {
         "name": "BLuchterhand"
@@ -144,6 +138,26 @@
         "content": "Easy - in the @fragment function, lines 277 and 278.\nChanging the smoothstep function from a 0.1 (second value) in line 277 removed height line\nChanging values in 278 (RGB format) gave me new colors",
         "mime": "text/markdown"
       }
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-08T01:27:25.364Z",
+      "id": "13",
+      "prio": 4,
+      "references": [],
+      "title": "Investigate frame-skip weirdness with mouse response"
+    },
+    {
+      "assignedTo": {
+        "name": "BLuchterhand"
+      },
+      "creation_time": "2023-02-05T04:15:15.960Z",
+      "id": "9",
+      "prio": 3,
+      "references": [],
+      "title": "Investigate off-center terrain gen"
     }
   ]
 }

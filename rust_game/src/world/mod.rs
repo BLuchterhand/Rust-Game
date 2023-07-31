@@ -7,6 +7,13 @@ use cgmath::Vector2;
 
 use crate::lib::{create_render_pipeline, model};
 
+
+struct VertexData {
+    position: [f32; 3],
+    normal: [f32; 3],
+    // Add other vertex attributes here if needed, such as texture coordinates, color, etc.
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct ChunkData {
@@ -16,25 +23,23 @@ struct ChunkData {
 }
 
 pub struct World {
-    chunks: HashMap<String, Chunk>,
+    pub chunks: HashMap<String, Chunk>,
     chunk_size: cgmath::Vector2<u32>,
-    min_max_height: cgmath::Vector2<f32>,
 }
 
 impl World {
-    pub fn new(chunk_size: cgmath::Vector2<u32>, min_max_height: cgmath::Vector2<f32>) -> Self {
+    pub fn new(chunk_size: cgmath::Vector2<u32>) -> Self {
         Self {
             chunks: HashMap::new(),
             chunk_size,
-            min_max_height,
         }
     }
 
-    pub fn load_chunks(
+    pub async fn load_chunks(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        pipeline: &impl GenerateChunk,
+        pipeline: &WorldPipeline,
         position: cgmath::Vector3<f32>,
     ) {
         // define chunk boundaries
@@ -72,6 +77,49 @@ impl World {
                     } else {
                         // chunk does not exist, generate
                         let new_chunk = pipeline.gen_chunk(&device, &queue, anchor_coords);
+                        // let num_vertices = (32 + 1) * (32 + 1);
+                        // let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                        //     label: Some("{}: Vertices"),
+                        //     size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
+                        //     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                        //     mapped_at_creation: false,
+                        // });
+
+                        // let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        //     label: Some("Render Encoder"),
+                        // });
+
+                        // encoder.copy_buffer_to_buffer(
+                        //     &new_chunk.mesh.vertex_buffer, 
+                        //     0, 
+                        //     &staging_buffer, 
+                        //     0, 
+                        //     (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
+                        // );
+                        // queue.submit(Some(encoder.finish()));
+
+                        // let buffer_slice = staging_buffer.slice(..);
+                        // let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+                        // buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+                        // device.poll(wgpu::Maintain::Wait);
+
+                        // if let Some(Ok(())) = receiver.receive().await {
+                        //     let data = buffer_slice.get_mapped_range();
+
+                        //     let vertex_count = data.len() / 8 / std::mem::size_of::<f32>(); // 2 attributes (position and normal)
+                        //     for i in 0..vertex_count {
+                        //         let vertex_offset = i * std::mem::size_of::<VertexData>();
+
+                        //         let position_bytes = &data[vertex_offset..vertex_offset + 3 * std::mem::size_of::<f32>()];
+                        //         let result: Vec<f32> = bytemuck::cast_slice(&position_bytes).to_vec();
+                        //         // println!("{:?}", result);
+                        //     }
+                        //     // Save this data to some chunk lookup table?
+                        //     drop(data);
+                        //     staging_buffer.unmap();
+                        // } else {
+                        //     panic!("failed to run compute on gpu!")
+                        // }
                         new_chunks.insert(chunk_key.clone(), new_chunk);
                     }
                 }
@@ -83,16 +131,7 @@ impl World {
 }
 
 pub struct Chunk {
-    mesh: model::Mesh,
-}
-
-pub trait GenerateChunk {
-    fn gen_chunk(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        corner: cgmath::Vector2<i32>,
-    ) -> Chunk;
+    pub mesh: model::Mesh,
 }
 
 pub struct WorldPipeline {
@@ -219,10 +258,8 @@ impl WorldPipeline {
             render_pass.draw_indexed(0..chunk.mesh.num_elements, 0, 0..1);
         }
     }
-}
-
-impl GenerateChunk for WorldPipeline {
-    fn gen_chunk(
+    
+    pub fn gen_chunk(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -309,8 +346,6 @@ impl GenerateChunk for WorldPipeline {
 
         queue.submit(std::iter::once(encoder.finish()));
         device.poll(wgpu::Maintain::Wait);
-
-        // resources::export_mesh_data(&format!("{}.json", chunk.mesh.name), device, &chunk.mesh);
 
         chunk
     }

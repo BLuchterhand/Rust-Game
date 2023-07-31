@@ -51,6 +51,7 @@ pub async fn run() {
     let mut state = State::new(window).await;
     state.window().set_visible(true);
     let mut last_render_time = instant::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
