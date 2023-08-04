@@ -5,12 +5,12 @@ mod resources;
 pub mod run;
 pub mod texture;
 mod options;
-mod pipelines;
+pub mod pipelines;
 mod utils;
 
-use std::convert::TryInto;
+use std::sync::Arc;
 use camera::CameraUniform;
-use cgmath::{prelude::*, Vector2};
+use cgmath::prelude::*;
 use instance::{Instance, InstanceRaw};
 use model::Vertex;
 use std::iter;
@@ -35,8 +35,8 @@ const NUM_INSTANCES_PER_ROW: u32 = 1;
 struct State {
     window: Window,
     surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
     config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
     obj_model: model::Model,
@@ -116,39 +116,14 @@ pub fn create_render_pipeline(
 }
 
 impl State {
-    async fn new(window: Window) -> Self {
+    async fn new(
+        window: Window, 
+        surface: wgpu::Surface, 
+        adapter: wgpu::Adapter,
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+    ) -> Self {
         let size = window.inner_size();
-
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            dx12_shader_compiler: Default::default(),
-        });
-
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .unwrap();
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    features: wgpu::Features::empty(),
-                    limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
@@ -396,9 +371,9 @@ impl State {
 
    async fn update(&mut self, dt: std::time::Duration) {
         //! Get distance from ground, feed into camera
-        let x_coord = (self.camera.position.x as i32 / 32 as i32) * 32 as i32;
-        let z_coord = (self.camera.position.z as i32 / 32 as i32) * 32 as i32;
-        let corner = Vector2::new(x_coord, z_coord);
+        // let x_coord = (self.camera.position.x as i32 / 32 as i32) * 32 as i32;
+        // let z_coord = (self.camera.position.z as i32 / 32 as i32) * 32 as i32;
+        // let corner = Vector2::new(x_coord, z_coord);
         
         // let result = self.ray_intersection_pipeline.get_buffer_contents(
         //     &self.device, 
@@ -444,20 +419,21 @@ impl State {
             bytemuck::cast_slice(&[self.light.uniform]),
         );
 
-        self.world.load_chunks(
-            &self.device,
-            &self.queue,
-            &self.world_pipeline,
-            (
-                self.camera.position.x,
-                self.camera.position.y,
-                self.camera.position.z,
-            )
-                .into(),
-        ).await;
+        // self.world.load_chunks(
+        //     &self.device,
+        //     &self.queue,
+        //     &self.world_pipeline,
+        //     (
+        //         self.camera.position.x,
+        //         self.camera.position.y,
+        //         self.camera.position.z,
+        //     )
+        //         .into(),
+        // ).await;
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        self.world.ingest_chunk_data(&self.device);
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture

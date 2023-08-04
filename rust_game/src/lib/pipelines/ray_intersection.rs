@@ -1,4 +1,5 @@
-use crate::world::{World, Chunk};
+use crate::world::{World};
+use crate::lib::pipelines::load_chunks::Chunk;
 use crate::lib::camera::Camera;
 
 

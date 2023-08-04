@@ -1,18 +1,13 @@
-use std::{
-    collections::HashMap,
-    mem::size_of_val,
-};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use cgmath::Vector2;
+use wgpu::util::DeviceExt;
 
-use crate::lib::{create_render_pipeline, model};
+use crate::lib::model::Mesh;
+use crate::lib::pipelines::load_chunks::{Chunk, RawBufferData};
+use crate::lib::create_render_pipeline;
 
-
-struct VertexData {
-    position: [f32; 3],
-    normal: [f32; 3],
-    // Add other vertex attributes here if needed, such as texture coordinates, color, etc.
-}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -24,22 +19,23 @@ struct ChunkData {
 
 pub struct World {
     pub chunks: HashMap<String, Chunk>,
+    pub requested_chunks: HashMap<String, Vec<i32>>,
     chunk_size: cgmath::Vector2<u32>,
+    pub raw_buffer_data: HashMap<String, RawBufferData>,
 }
 
 impl World {
     pub fn new(chunk_size: cgmath::Vector2<u32>) -> Self {
         Self {
             chunks: HashMap::new(),
+            requested_chunks: HashMap::new(),
             chunk_size,
+            raw_buffer_data: HashMap::new(),
         }
     }
 
-    pub async fn load_chunks(
+    pub fn load_chunks<'a, 'b>(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        pipeline: &WorldPipeline,
         position: cgmath::Vector3<f32>,
     ) {
         // define chunk boundaries
@@ -62,76 +58,68 @@ impl World {
                 z = j - r;
 
                 // convert anchor point to coordinates
-                let anchor_coords =
-                    Vector2::new(
-                        x * self.chunk_size.x as i32 + x_coord - (self.chunk_size.x as i32 * r), 
-                        z * self.chunk_size.y as i32 + z_coord - (self.chunk_size.y as i32 * r),
-                    );
+                let x_anchor = x * self.chunk_size.x as i32 + x_coord - (self.chunk_size.x as i32 * r);
+                let z_anchor = z * self.chunk_size.y as i32 + z_coord - (self.chunk_size.y as i32 * r);
+                let anchor_coords = vec![x_anchor, z_anchor];
 
                 // if chunk is within render distance
                 if x * x + z * z <= r * r + 1 {
-                    let chunk_key = format!("{}_{}", anchor_coords.x, anchor_coords.y);
+                    let chunk_key = format!("{}_{}", x_anchor, z_anchor);
                     if let Some(chunk) = self.chunks.remove(&chunk_key) {
-                        // chunk exists
+                        // generated chunk exists, keep it
                         new_chunks.insert(chunk_key.clone(), chunk);
+                        if let Some(_) = self.requested_chunks.remove(&chunk_key) {
+                            // leave chunk removed from requested list
+                        }
                     } else {
-                        // chunk does not exist, generate
-                        let new_chunk = pipeline.gen_chunk(&device, &queue, anchor_coords);
-                        // let num_vertices = (32 + 1) * (32 + 1);
-                        // let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                        //     label: Some("{}: Vertices"),
-                        //     size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
-                        //     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                        //     mapped_at_creation: false,
-                        // });
-
-                        // let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        //     label: Some("Render Encoder"),
-                        // });
-
-                        // encoder.copy_buffer_to_buffer(
-                        //     &new_chunk.mesh.vertex_buffer, 
-                        //     0, 
-                        //     &staging_buffer, 
-                        //     0, 
-                        //     (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
-                        // );
-                        // queue.submit(Some(encoder.finish()));
-
-                        // let buffer_slice = staging_buffer.slice(..);
-                        // let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-                        // buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-                        // device.poll(wgpu::Maintain::Wait);
-
-                        // if let Some(Ok(())) = receiver.receive().await {
-                        //     let data = buffer_slice.get_mapped_range();
-
-                        //     let vertex_count = data.len() / 8 / std::mem::size_of::<f32>(); // 2 attributes (position and normal)
-                        //     for i in 0..vertex_count {
-                        //         let vertex_offset = i * std::mem::size_of::<VertexData>();
-
-                        //         let position_bytes = &data[vertex_offset..vertex_offset + 3 * std::mem::size_of::<f32>()];
-                        //         let result: Vec<f32> = bytemuck::cast_slice(&position_bytes).to_vec();
-                        //         // println!("{:?}", result);
-                        //     }
-                        //     // Save this data to some chunk lookup table?
-                        //     drop(data);
-                        //     staging_buffer.unmap();
-                        // } else {
-                        //     panic!("failed to run compute on gpu!")
-                        // }
-                        new_chunks.insert(chunk_key.clone(), new_chunk);
+                        // generated chunk does not exist, request it
+                        println!("DOESNT EXIST");
+                        if let Some(coords) = self.requested_chunks.remove(&chunk_key) {
+                            // chunk exists
+                            self.requested_chunks.insert(chunk_key.clone(), coords);
+                        } else {
+                            // chunk does not exist, request
+                            self.requested_chunks.insert(chunk_key.clone(), anchor_coords);
+                        }
                     }
                 }
             }
         }
-
+  
         self.chunks = new_chunks;
     }
-}
 
-pub struct Chunk {
-    pub mesh: model::Mesh,
+    pub fn ingest_chunk_data(&mut self, device: &wgpu::Device) {
+        for (chunk_key, chunk_data) in &self.raw_buffer_data {
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: &chunk_data.vertex_data,
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: &chunk_data.index_data,
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+            // chunk size x * chunk size y * 6
+            let num_elements = 32 * 32 * 6;
+            let chunk = Chunk {
+                mesh: Mesh {
+                    name: chunk_key.to_string(),
+                    vertex_buffer,
+                    index_buffer,
+                    num_elements,
+                    material: 0,
+                    index_format: wgpu::IndexFormat::Uint32,
+                },
+            };
+
+            self.chunks.insert(chunk_key.to_string(), chunk);
+        }
+        self.raw_buffer_data = HashMap::new();
+    }
 }
 
 pub struct WorldPipeline {
@@ -257,96 +245,5 @@ impl WorldPipeline {
             render_pass.set_vertex_buffer(0, chunk.mesh.vertex_buffer.slice(..));
             render_pass.draw_indexed(0..chunk.mesh.num_elements, 0, 0..1);
         }
-    }
-    
-    pub fn gen_chunk(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        corner: cgmath::Vector2<i32>,
-    ) -> Chunk {
-        let chunk_name = format!("Chunk {:?}", corner);
-        let num_vertices = (self.chunk_size.x + 1) * (self.chunk_size.y + 1);
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("{}: Vertices", chunk_name)),
-            size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::VERTEX
-                | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
-        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("{}: Indices", chunk_name)),
-            size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::INDEX
-                | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-        let chunk = Chunk {
-            mesh: model::Mesh {
-                name: chunk_name,
-                vertex_buffer,
-                index_buffer,
-                num_elements,
-                material: 0,
-                index_format: wgpu::IndexFormat::Uint32,
-            },
-        };
-
-        let data = ChunkData {
-            chunk_size: self.chunk_size.into(),
-            chunk_corner: corner.into(),
-            min_max_height: self.min_max_height.into(),
-        };
-        let gen_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("TerrainPipeline: ChunkData"),
-            size: size_of_val(&data) as _,
-            usage: wgpu::BufferUsages::UNIFORM
-                | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        queue.write_buffer(&gen_buffer, 0, bytemuck::bytes_of(&data));
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("TerrainPipeline: BindGroup"),
-            layout: &self.gen_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: gen_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: chunk.mesh.vertex_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: chunk.mesh.index_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("TerrainPipeline::gen_chunk"),
-        });
-
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("TerrainPipeline: ComputePass"),
-        });
-        cpass.set_pipeline(&self.gen_pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
-        cpass.dispatch_workgroups(
-            (((self.chunk_size.x + 1) * (self.chunk_size.y + 1)) as f32 / 64.0).ceil() as _,
-            1,
-            1,
-        );
-        drop(cpass);
-
-        queue.submit(std::iter::once(encoder.finish()));
-        device.poll(wgpu::Maintain::Wait);
-
-        chunk
     }
 }

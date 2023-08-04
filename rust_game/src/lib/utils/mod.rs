@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cgmath::Point3;
 
-use crate::world::Chunk;
+use crate::lib::pipelines::load_chunks::Chunk;
 
 
 struct Utils{
