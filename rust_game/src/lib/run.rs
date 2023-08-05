@@ -53,6 +53,7 @@ pub async fn run() {
 
     let mut last_render_time = instant::Instant::now();
 
+    // Define rendering device
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
         dx12_shader_compiler: Default::default(),
@@ -96,41 +97,25 @@ pub async fn run() {
     ).await;
     state.window().set_visible(true);
 
-    let camera_bind_group_layout =
-            compute_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("camera_bind_group_layout"),
-            });
-
-    let chunk_size = (32, 32).into();
+    // Define shared resources
     let world_chunks: Arc<Mutex<HashMap<String, RawBufferData>>> = Arc::new(Mutex::new(HashMap::new()));
     let world_chunks_shared = Arc::clone(&world_chunks);
     let mut world_compute = ComputeWorld::new();
-    let min_max_height = (-5.0, 5.0).into();
     let world_pipeline = ComputeWorldPipeline::new(
         &compute_device,
-        chunk_size,
-        min_max_height,
     );
 
     let requested_chunks: Arc<Mutex<HashMap<String, Vec<i32>>>> = Arc::new(Mutex::new(HashMap::new()));
     let requested_chunks_shared = Arc::clone(&requested_chunks);
 
+    // Initiate Terrain Generation Loop
     tokio::spawn(async move {
         let mut last_execution_time = Instant::now();
 
         loop {
             let now = Instant::now();
             if now - last_execution_time >= Duration::from_millis(500) {
+                // update requested chunks list
                 let mut temp_requested_chunks = HashMap::new();
                 if let Ok(x) = requested_chunks.lock() {
                     temp_requested_chunks = x.clone();
@@ -143,6 +128,7 @@ pub async fn run() {
                     temp_requested_chunks,
                 ).await;
 
+                // update shared chunks with newly created chunks
                 if let Ok(mut x) = world_chunks_shared.lock() {
                     x.extend(world_compute.chunks.clone());
                 }
@@ -154,6 +140,7 @@ pub async fn run() {
         }
     });
 
+    // Initiate core game loop
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -197,7 +184,7 @@ pub async fn run() {
                     }
                 }
 
-                state.world.load_chunks(
+                state.world.preflight_chunks(
                     (
                         state.camera.position.x,
                         state.camera.position.y,

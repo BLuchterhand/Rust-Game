@@ -4,13 +4,7 @@ use std::{
 };
 
 use cgmath::Vector2;
-
 use crate::lib::model;
-
-struct VertexData {
-    position: [f32; 3],
-    normal: [f32; 3],
-}
 
 #[derive(Clone)]
 pub struct RawBufferData {
@@ -96,22 +90,6 @@ impl ComputeWorld {
                 if let Some(Ok(())) = receiver.receive().await {
                     let data = buffer_slice.get_mapped_range();
                     vertex_data.copy_from_slice(bytemuck::cast_slice(&data));
-
-                    // let vertex_count = data.len() / 8 / std::mem::size_of::<f32>(); // 2 attributes (position and normal)
-                    // for i in 0..vertex_count {
-                    //     let vertex_offset = i * std::mem::size_of::<VertexData>();
-
-                    //     let position_bytes = &data[vertex_offset..vertex_offset + 3 * std::mem::size_of::<f32>()];
-                    //     let result: Vec<f32> = bytemuck::cast_slice(&position_bytes).to_vec();
-                    //     new_chunks.insert(chunk_key.clone(), RawBufferData {
-                    //         vertex_data: result,
-                    //     });
-
-                    //     if chunk_key == "0_0"{
-                    //         println!("HERE");
-                    //         println!("{:?}", chunk_key);
-                    //     }
-                    // }
                     drop(data);
                     vertex_staging_buffer.unmap();
                 } else {
@@ -167,8 +145,6 @@ pub struct ComputeWorldPipeline {
 impl ComputeWorldPipeline {
   pub fn new(
       device: &wgpu::Device,
-      chunk_size: cgmath::Vector2<u32>,
-      min_max_height: cgmath::Vector2<f32>,
   ) -> Self {
       let gen_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
           label: Some("ChunkLoader::Layout"),
@@ -221,8 +197,8 @@ impl ComputeWorldPipeline {
       });
 
       Self {
-          chunk_size,
-          min_max_height,
+          chunk_size: (32, 32).into(),
+          min_max_height: (-5.0, 5.0).into(),
           gen_layout,
           gen_pipeline,
       }

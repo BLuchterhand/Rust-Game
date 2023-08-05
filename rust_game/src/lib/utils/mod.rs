@@ -1,37 +1,22 @@
-use std::collections::HashMap;
 
-use cgmath::Point3;
+// struct VertexData {
+//   position: [f32; 3],
+//   normal: [f32; 3],
+// }
 
-use crate::lib::pipelines::load_chunks::Chunk;
+// Loading vertex pos!!!!
+ // let vertex_count = data.len() / 8 / std::mem::size_of::<f32>(); // 2 attributes (position and normal)
+// for i in 0..vertex_count {
+//     let vertex_offset = i * std::mem::size_of::<VertexData>();
 
+//     let position_bytes = &data[vertex_offset..vertex_offset + 3 * std::mem::size_of::<f32>()];
+//     let result: Vec<f32> = bytemuck::cast_slice(&position_bytes).to_vec();
+//     new_chunks.insert(chunk_key.clone(), RawBufferData {
+//         vertex_data: result,
+//     });
 
-struct Utils{
-    chunk_distance: i32,
-    chunk_size: cgmath::Vector2<u32>,
-}
-
-impl Utils {
-    pub fn new(chunk_distance: i32, chunk_size: cgmath::Vector2<u32>) -> Self {
-        Self {
-            chunk_distance,
-            chunk_size,
-        }
-    }
-
-    // pub fn get_chunk_by_coords(
-    //     &mut self,
-    //     chunks: HashMap<String, Chunk>, 
-    //     position: Point3<f32>,
-    // ) {
-    //     // Get the x and z coords of the chunk identifier
-    //     let x_coord = (position.x as i32 / self.chunk_size.x as i32) * self.chunk_size.x as i32;
-    //     let z_coord = (position.z as i32 / self.chunk_size.y as i32) * self.chunk_size.y as i32;
-
-    //     let chunk_key = format!("{}_{}", x_coord, z_coord);
-    //     match chunks.get(&chunk_key) {
-    //         Some(&chunk) => println!("FOUND: {:?}", chunk.mesh.vertex_buffer),
-    //         _ => println!("NOT FOUND"),
-    //     }
-    
-    // }
-}
+//     if chunk_key == "0_0"{
+//         println!("HERE");
+//         println!("{:?}", chunk_key);
+//     }
+// }

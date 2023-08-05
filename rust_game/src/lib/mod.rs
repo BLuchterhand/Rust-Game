@@ -279,12 +279,9 @@ impl State {
         let render_pipeline = init_render_pipeline(&device, &render_pipeline_layout, &config);
         let debug_material = init_debug_material(&device, &queue, &texture_bind_group_layout);
         let chunk_size = (32, 32).into();
-        let min_max_height = (-5.0, 5.0).into();
         let world = World::new(chunk_size);
         let world_pipeline = world::WorldPipeline::new(
             &device,
-            chunk_size,
-            min_max_height,
             &camera_bind_group_layout,
             &light.bind_group_layout,
             config.format,
@@ -370,35 +367,6 @@ impl State {
     }
 
    async fn update(&mut self, dt: std::time::Duration) {
-        //! Get distance from ground, feed into camera
-        // let x_coord = (self.camera.position.x as i32 / 32 as i32) * 32 as i32;
-        // let z_coord = (self.camera.position.z as i32 / 32 as i32) * 32 as i32;
-        // let corner = Vector2::new(x_coord, z_coord);
-        
-        // let result = self.ray_intersection_pipeline.get_buffer_contents(
-        //     &self.device, 
-        //     &self.queue, 
-        //     chunk,
-        // ).await;
-
-        // println!("{:?}", result);
-
-        // let buffer_slice = &self.ray_intersection_pipeline.staging_buffer.slice(..);
-        // let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-        // buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-        // self.device.poll(wgpu::Maintain::Wait);
-
-        // if let Some(Ok(())) = receiver.receive().await {
-        //     let data = buffer_slice.get_mapped_range();
-
-        //     let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
-        //     drop(data);
-        //     println!("{:?}", result);
-        //     &self.ray_intersection_pipeline.staging_buffer.unmap();
-        // } else {
-        //     panic!("failed to run compute on gpu!")
-        // }
-
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
@@ -418,18 +386,6 @@ impl State {
             0,
             bytemuck::cast_slice(&[self.light.uniform]),
         );
-
-        // self.world.load_chunks(
-        //     &self.device,
-        //     &self.queue,
-        //     &self.world_pipeline,
-        //     (
-        //         self.camera.position.x,
-        //         self.camera.position.y,
-        //         self.camera.position.z,
-        //     )
-        //         .into(),
-        // ).await;
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

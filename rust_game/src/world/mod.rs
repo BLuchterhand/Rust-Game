@@ -1,7 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-
-use cgmath::Vector2;
 use wgpu::util::DeviceExt;
 
 use crate::lib::model::Mesh;
@@ -34,7 +31,7 @@ impl World {
         }
     }
 
-    pub fn load_chunks<'a, 'b>(
+    pub fn preflight_chunks<'a, 'b>(
         &mut self,
         position: cgmath::Vector3<f32>,
     ) {
@@ -123,73 +120,18 @@ impl World {
 }
 
 pub struct WorldPipeline {
-    chunk_size: cgmath::Vector2<u32>,
-    min_max_height: cgmath::Vector2<f32>,
-    gen_layout: wgpu::BindGroupLayout,
-    gen_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
 }
 
 impl WorldPipeline {
     pub fn new(
         device: &wgpu::Device,
-        chunk_size: cgmath::Vector2<u32>,
-        min_max_height: cgmath::Vector2<f32>,
         camera_layout: &wgpu::BindGroupLayout,
         light_layout: &wgpu::BindGroupLayout,
         color_format: wgpu::TextureFormat,
         depth_format: Option<wgpu::TextureFormat>,
     ) -> Self {
-        let gen_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ChunkLoader::Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
-
         let shader = device.create_shader_module(wgpu::include_wgsl!("terrain.wgsl"));
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("TerrainPipeline::Gen::PipelineLayout"),
-            bind_group_layouts: &[&gen_layout],
-            push_constant_ranges: &[],
-        });
-        let gen_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("TerrainPipeline::ComputePipeline"),
-            layout: Some(&pipeline_layout),
-            module: &shader,
-            entry_point: "gen_terrain_compute",
-        });
-
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("TerrainPipeline::Render::PipelineLayout"),
@@ -221,10 +163,6 @@ impl WorldPipeline {
         );
 
         Self {
-            chunk_size,
-            min_max_height,
-            gen_layout,
-            gen_pipeline,
             render_pipeline,
         }
     }
