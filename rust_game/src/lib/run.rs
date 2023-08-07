@@ -1,5 +1,6 @@
 use std::{sync::{Arc, Mutex}, collections::HashMap, time::Instant, thread};
 
+use cgmath::Vector2;
 use instant::Duration;
 use winit::{
     event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -84,6 +85,7 @@ pub async fn run() {
         .await
         .unwrap();
 
+    let chunk_size: Vector2<u32> = Vector2::new(32, 32);
     let compute_device = Arc::new(device);
     let compute_queue = Arc::new(queue);
     let render_device = Arc::clone(&compute_device);
@@ -94,13 +96,14 @@ pub async fn run() {
         adapter,
         render_device,
         render_queue,
+        chunk_size,
     ).await;
     state.window().set_visible(true);
 
     // Define shared resources
     let world_chunks: Arc<Mutex<HashMap<String, RawBufferData>>> = Arc::new(Mutex::new(HashMap::new()));
     let world_chunks_shared = Arc::clone(&world_chunks);
-    let mut world_compute = ComputeWorld::new();
+    let mut world_compute = ComputeWorld::new(chunk_size);
     let world_pipeline = ComputeWorldPipeline::new(
         &compute_device,
     );

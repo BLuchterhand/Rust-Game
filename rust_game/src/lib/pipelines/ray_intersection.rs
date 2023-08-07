@@ -1,14 +1,20 @@
+use cgmath::Vector2;
+
 use crate::world::{World};
 use crate::lib::pipelines::load_chunks::Chunk;
 use crate::lib::camera::Camera;
 
+use super::load_chunks::RawBufferData;
+
 
 pub struct RayIntersectPipeline {
-  pub compute_pipeline: wgpu::ComputePipeline,
-  pub compute_bind_group: wgpu::BindGroup,
+  pub ray_intersect_pipeline: wgpu::ComputePipeline,
+  pub bind_group: wgpu::BindGroup,
+  pub index_buffer: wgpu::Buffer,
+  pub vertex_buffer: wgpu::Buffer,
   pub result_buffer: wgpu::Buffer,
   pub staging_buffer: wgpu::Buffer,
-  pub size: u64,
+  pub buffer_size: u64,
 }
 
 impl RayIntersectPipeline {
@@ -17,10 +23,12 @@ impl RayIntersectPipeline {
         camera: &Camera,
         camera_buffer: &wgpu::Buffer,
         world: &World,
+        chunk_size: Vector2<u32>
     ) -> Self {
         let compute_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
+                    // Camera buffer
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
@@ -31,6 +39,7 @@ impl RayIntersectPipeline {
                         },
                         count: None,
                     },
+                    // Vertex buffer
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::COMPUTE,
@@ -41,8 +50,20 @@ impl RayIntersectPipeline {
                         },
                         count: None,
                     },
+                    // Index buffer
                     wgpu::BindGroupLayoutEntry {
-                            binding: 2,
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Result buffer
+                    wgpu::BindGroupLayoutEntry {
+                            binding: 3,
                             visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -62,10 +83,10 @@ impl RayIntersectPipeline {
                 push_constant_ranges: &[],
         });
 
-        let compute_pipeline = {
+        let ray_intersect_pipeline = {
             let desc = wgpu::ShaderModuleDescriptor {
                 label: Some("Compute"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("compute.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(include_str!("ray_intersect.wgsl").into()),
             };
 
             let shader = device.create_shader_module(desc);
@@ -87,13 +108,23 @@ impl RayIntersectPipeline {
             mapped_at_creation: false,
         });
 
-        let num_elements = 32 * 32 * 6;
+        let num_elements = chunk_size.x * chunk_size.y * 6;
         let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Index Buffer"),
             size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
             usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::INDEX
-                | wgpu::BufferUsages::COPY_SRC,
+            | wgpu::BufferUsages::COPY_DST
+            | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let num_vertices = (chunk_size.x + 1) * (chunk_size.y + 1);
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Vertex Buffer"),
+            size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
+            usage: wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_DST
+            | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -104,47 +135,58 @@ impl RayIntersectPipeline {
             mapped_at_creation: false,
         });
 
-        let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &compute_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: index_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: result_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: vertex_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: index_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: result_buffer.as_entire_binding(),
+                }
+            ],
             label: Some("compute_bind_group"),
         });
 
         Self {
-            compute_pipeline,
-            compute_bind_group,
+            ray_intersect_pipeline,
+            bind_group,
+            index_buffer,
+            vertex_buffer,
             result_buffer,
             staging_buffer,
-            size,
+            buffer_size: size,
         }
     }
 
-    pub async fn get_buffer_contents(
+    pub async fn ray_intersect(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        chunk: Chunk,
+        raw_buffer_data: RawBufferData,
     ) -> f32 {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
         });
 
+        queue.write_buffer(&self.vertex_buffer, 0, &raw_buffer_data.vertex_data);
+        queue.write_buffer(&self.index_buffer, 0, &raw_buffer_data.index_data);
+
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Ray Intersection: ComputePass"),
         });
-        cpass.set_pipeline(&self.compute_pipeline);
-        cpass.set_bind_group(0, &self.compute_bind_group, &[]);
+        cpass.set_pipeline(&self.ray_intersect_pipeline);
+        cpass.set_bind_group(0, &self.bind_group, &[]);
         cpass.dispatch_workgroups(
             1,
             1,
@@ -162,7 +204,7 @@ impl RayIntersectPipeline {
             0, 
             &self.staging_buffer, 
             0, 
-            self.size,
+            self.buffer_size,
         );
         queue.submit(Some(encoder.finish()));
 
@@ -176,7 +218,7 @@ impl RayIntersectPipeline {
 
             let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
             drop(data);
-            &self.staging_buffer.unmap();
+            let _ = &self.staging_buffer.unmap();
 
             return result[0]
         } else {

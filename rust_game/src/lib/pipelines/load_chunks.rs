@@ -26,12 +26,14 @@ struct ChunkData {
 
 pub struct ComputeWorld {
   pub chunks: HashMap<String, RawBufferData>,
+  chunk_size: Vector2<u32>,
 }
 
 impl ComputeWorld {
-  pub fn new() -> Self {
+  pub fn new(chunk_size: Vector2<u32>) -> Self {
       Self {
           chunks: HashMap::new(),
+          chunk_size,
       }
   }
 
@@ -52,8 +54,8 @@ impl ComputeWorld {
                 let new_chunk = pipeline.gen_chunk(&device, &queue, Vector2::new(
                     anchor_coords[0], anchor_coords[1]
                 ));
-                let num_vertices = (32 + 1) * (32 + 1);
-                let num_indices = (32) * (32);
+                let num_vertices = (self.chunk_size.x + 1) * (self.chunk_size.y + 1);
+                let num_indices = self.chunk_size.x * self.chunk_size.y;
                 let vertex_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("Vertices"),
                     size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
@@ -182,7 +184,7 @@ impl ComputeWorldPipeline {
           ],
       });
 
-      let shader = device.create_shader_module(wgpu::include_wgsl!("terrain.wgsl"));
+      let shader = device.create_shader_module(wgpu::include_wgsl!("gen_terrain.wgsl"));
 
       let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
           label: Some("TerrainPipeline::Gen::PipelineLayout"),
@@ -204,94 +206,94 @@ impl ComputeWorldPipeline {
       }
   }
   
-  pub fn gen_chunk(
-      &self,
-      device: &wgpu::Device,
-      queue: &wgpu::Queue,
-      corner: cgmath::Vector2<i32>,
-  ) -> Chunk {
-      let chunk_name = format!("Chunk {:?}", corner);
-      let num_vertices = (self.chunk_size.x + 1) * (self.chunk_size.y + 1);
-      let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-          label: Some(&format!("{}: Vertices", chunk_name)),
-          size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
-          usage: wgpu::BufferUsages::STORAGE
-              | wgpu::BufferUsages::VERTEX
-              | wgpu::BufferUsages::COPY_SRC,
-          mapped_at_creation: false,
-      });
-      let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
-      let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-          label: Some(&format!("{}: Indices", chunk_name)),
-          size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
-          usage: wgpu::BufferUsages::STORAGE
-              | wgpu::BufferUsages::INDEX
-              | wgpu::BufferUsages::COPY_SRC,
-          mapped_at_creation: false,
-      });
-      let chunk = Chunk {
-          mesh: model::Mesh {
-              name: chunk_name,
-              vertex_buffer,
-              index_buffer,
-              num_elements,
-              material: 0,
-              index_format: wgpu::IndexFormat::Uint32,
-          },
-      };
+    pub fn gen_chunk(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        corner: cgmath::Vector2<i32>,
+    ) -> Chunk {
+        let chunk_name = format!("Chunk {:?}", corner);
+        let num_vertices = (self.chunk_size.x + 1) * (self.chunk_size.y + 1);
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{}: Vertices", chunk_name)),
+            size: (num_vertices * 8 * std::mem::size_of::<f32>() as u32) as _,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
+        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{}: Indices", chunk_name)),
+            size: (num_elements * std::mem::size_of::<u32>() as u32) as _,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDEX
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let chunk = Chunk {
+            mesh: model::Mesh {
+                name: chunk_name,
+                vertex_buffer,
+                index_buffer,
+                num_elements,
+                material: 0,
+                index_format: wgpu::IndexFormat::Uint32,
+            },
+        };
 
-      let data = ChunkData {
-          chunk_size: self.chunk_size.into(),
-          chunk_corner: corner.into(),
-          min_max_height: self.min_max_height.into(),
-      };
-      let gen_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-          label: Some("TerrainPipeline: ChunkData"),
-          size: size_of_val(&data) as _,
-          usage: wgpu::BufferUsages::UNIFORM
-              | wgpu::BufferUsages::COPY_DST,
-          mapped_at_creation: false,
-      });
-      queue.write_buffer(&gen_buffer, 0, bytemuck::bytes_of(&data));
+        let data = ChunkData {
+            chunk_size: self.chunk_size.into(),
+            chunk_corner: corner.into(),
+            min_max_height: self.min_max_height.into(),
+        };
+        let gen_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("TerrainPipeline: ChunkData"),
+            size: size_of_val(&data) as _,
+            usage: wgpu::BufferUsages::UNIFORM
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&gen_buffer, 0, bytemuck::bytes_of(&data));
 
-      let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-          label: Some("TerrainPipeline: BindGroup"),
-          layout: &self.gen_layout,
-          entries: &[
-              wgpu::BindGroupEntry {
-                  binding: 0,
-                  resource: gen_buffer.as_entire_binding(),
-              },
-              wgpu::BindGroupEntry {
-                  binding: 1,
-                  resource: chunk.mesh.vertex_buffer.as_entire_binding(),
-              },
-              wgpu::BindGroupEntry {
-                  binding: 2,
-                  resource: chunk.mesh.index_buffer.as_entire_binding(),
-              },
-          ],
-      });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("TerrainPipeline: BindGroup"),
+            layout: &self.gen_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: gen_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: chunk.mesh.vertex_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: chunk.mesh.index_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
-      let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-          label: Some("TerrainPipeline::gen_chunk"),
-      });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("TerrainPipeline::gen_chunk"),
+        });
 
-      let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-          label: Some("TerrainPipeline: ComputePass"),
-      });
-      cpass.set_pipeline(&self.gen_pipeline);
-      cpass.set_bind_group(0, &bind_group, &[]);
-      cpass.dispatch_workgroups(
-          (((self.chunk_size.x + 1) * (self.chunk_size.y + 1)) as f32 / 64.0).ceil() as _,
-          1,
-          1,
-      );
-      drop(cpass);
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("TerrainPipeline: ComputePass"),
+        });
+        cpass.set_pipeline(&self.gen_pipeline);
+        cpass.set_bind_group(0, &bind_group, &[]);
+        cpass.dispatch_workgroups(
+            (((self.chunk_size.x + 1) * (self.chunk_size.y + 1)) as f32 / 64.0).ceil() as _,
+            1,
+            1,
+        );
+        drop(cpass);
 
-      queue.submit(std::iter::once(encoder.finish()));
-      device.poll(wgpu::Maintain::Wait);
+        queue.submit(std::iter::once(encoder.finish()));
+        device.poll(wgpu::Maintain::Wait);
 
-      chunk
-  }
+        chunk
+    }
 }

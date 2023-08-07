@@ -18,7 +18,8 @@ pub struct World {
     pub chunks: HashMap<String, Chunk>,
     pub requested_chunks: HashMap<String, Vec<i32>>,
     chunk_size: cgmath::Vector2<u32>,
-    pub raw_buffer_data: HashMap<String, RawBufferData>,
+    pub raw_buffer_data: HashMap<String, RawBufferData>, // raw data coming from compute pipeline
+    pub raw_chunk_data: HashMap<String, RawBufferData>, // raw data, just saved to new location
 }
 
 impl World {
@@ -28,6 +29,7 @@ impl World {
             requested_chunks: HashMap::new(),
             chunk_size,
             raw_buffer_data: HashMap::new(),
+            raw_chunk_data: HashMap::new(),
         }
     }
 
@@ -59,9 +61,10 @@ impl World {
                 let z_anchor = z * self.chunk_size.y as i32 + z_coord - (self.chunk_size.y as i32 * r);
                 let anchor_coords = vec![x_anchor, z_anchor];
 
+                let chunk_key = format!("{}_{}", x_anchor, z_anchor);
+
                 // if chunk is within render distance
                 if x * x + z * z <= r * r + 1 {
-                    let chunk_key = format!("{}_{}", x_anchor, z_anchor);
                     if let Some(chunk) = self.chunks.remove(&chunk_key) {
                         // generated chunk exists, keep it
                         new_chunks.insert(chunk_key.clone(), chunk);
@@ -70,7 +73,6 @@ impl World {
                         }
                     } else {
                         // generated chunk does not exist, request it
-                        println!("DOESNT EXIST");
                         if let Some(coords) = self.requested_chunks.remove(&chunk_key) {
                             // chunk exists
                             self.requested_chunks.insert(chunk_key.clone(), coords);
@@ -101,7 +103,7 @@ impl World {
             });
 
             // chunk size x * chunk size y * 6
-            let num_elements = 32 * 32 * 6;
+            let num_elements = self.chunk_size.x * self.chunk_size.y * 6;
             let chunk = Chunk {
                 mesh: Mesh {
                     name: chunk_key.to_string(),
@@ -114,6 +116,7 @@ impl World {
             };
 
             self.chunks.insert(chunk_key.to_string(), chunk);
+            self.raw_chunk_data.insert(chunk_key.to_string(), chunk_data.clone());
         }
         self.raw_buffer_data = HashMap::new();
     }

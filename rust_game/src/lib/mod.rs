@@ -10,7 +10,7 @@ mod utils;
 
 use std::sync::Arc;
 use camera::CameraUniform;
-use cgmath::prelude::*;
+use cgmath::{prelude::*, Vector2};
 use instance::{Instance, InstanceRaw};
 use model::Vertex;
 use std::iter;
@@ -122,6 +122,7 @@ impl State {
         adapter: wgpu::Adapter,
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
+        chunk_size: Vector2<u32>,
     ) -> Self {
         let size = window.inner_size();
 
@@ -278,7 +279,6 @@ impl State {
 
         let render_pipeline = init_render_pipeline(&device, &render_pipeline_layout, &config);
         let debug_material = init_debug_material(&device, &queue, &texture_bind_group_layout);
-        let chunk_size = (32, 32).into();
         let world = World::new(chunk_size);
         let world_pipeline = world::WorldPipeline::new(
             &device,
@@ -293,6 +293,7 @@ impl State {
             &camera,
             &camera_buffer, 
             &world,
+            chunk_size,
         );
 
         Self {
@@ -367,6 +368,26 @@ impl State {
     }
 
    async fn update(&mut self, dt: std::time::Duration) {
+        let mut x_anchor = (self.camera.position.x as i32 / 32 as i32) * 32 as i32;
+        let mut z_anchor = (self.camera.position.z as i32 / 32 as i32) * 32 as i32;
+
+        if self.camera.position.x < 0.0 {
+            x_anchor = x_anchor - 32;
+        }
+        if self.camera.position.z < 0.0 {
+            z_anchor = z_anchor - 32;
+        }
+        
+        let chunk_key = format!("{}_{}", x_anchor, z_anchor);
+        if self.world.raw_chunk_data.len() > 0 {
+            let result = self.ray_intersection_pipeline.ray_intersect(
+                &self.device, 
+                &self.queue, 
+                self.world.raw_chunk_data[&chunk_key].clone(),
+            ).await;
+            self.camera.position.y = self.camera.position.y - result + 3.0;
+        }
+
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
